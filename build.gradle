@@ -1,0 +1,57 @@
+buildscript{
+    repositories{
+        mavenCentral()
+        maven{url 'https://javacard.pro/maven'}
+        maven{url 'https://deadcode.me/mvm'}
+    }
+    dependencies{
+        classpath 'com.klinec:gradle-javacard:1.8.0'
+    }
+}
+
+plugins {
+    id 'java'
+}
+group 'josh'
+version '1.0-SNAPSHOT'
+
+apply plugin:'com.klinec.gradle.javacard'
+apply plugin:'idea'
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    maven{url 'https://javacard.pro/maven'}
+    maven{url 'https://deadcode.me/mvm'}
+    flatDir{
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+final def sdk_dir = 'sdks/jc304_kit'
+javacard{
+    config{
+        jckit sdk_dir
+        debugGpPro true
+        cap{
+            packageName 'josh.passport'
+            version '0.1'
+            aid '0xA0:0x00:0x00:0x02:0x47:0x10'
+            output 'applet.cap'
+            targetsdk sdk_dir
+            applet{
+                className 'josh.passport.EvilPassportApplet'
+                aid '0xA0:0x00:0x00:0x02:0x47:0x10:0x01'
+            }
+        }
+    }
+}
