@@ -166,6 +166,8 @@ public class PassportApplet extends Applet implements ISO7816 {
 
     private byte[] chainingTmp;
 
+    static final byte INS_TESTING = (byte)0xff;
+
     // This is as long we suspect a card verifiable certifcate could be
     private static final short CHAINING_BUFFER_LENGTH = 400;
 
@@ -254,6 +256,11 @@ public class PassportApplet extends Applet implements ISO7816 {
             // available.
             // org.globalplatform.GPSystem.setATRHistBytes(ATRGlobal.ATR_HIST,
             // (short) 0x00, ATRGlobal.ATR_HIST_LEN);
+            byte[] hello = new byte[]{'H','E','L','L','O'};
+            for (short i = 0; i < hello.length; i++) {
+                buffer[i] = hello[i];
+            }
+            apdu.setOutgoingAndSend((short)0, (short)hello.length);
             return;
         }
 
@@ -309,10 +316,10 @@ public class PassportApplet extends Applet implements ISO7816 {
         short responseLength = 0;
 
         switch (ins) {
-        case INS_GET_CHALLENGE:
+        case INS_GET_CHALLENGE: //defined in 9303-11
             responseLength = processGetChallenge(apdu, protectedApdu, le);
             break;
-        case INS_EXTERNAL_AUTHENTICATE:
+        case INS_EXTERNAL_AUTHENTICATE: //defined in 9303-11
             responseLength = processMutualAuthenticate(apdu, protectedApdu);
             break;
         case INS_PSO:
@@ -327,23 +334,28 @@ public class PassportApplet extends Applet implements ISO7816 {
             }
             responseLength = processMSE(apdu);
             break;
-        case INS_INTERNAL_AUTHENTICATE:
+        case INS_INTERNAL_AUTHENTICATE: //defined in 9303-11
             responseLength = processInternalAuthenticate(apdu, protectedApdu);
             break;
-        case INS_SELECT_FILE:
-            processSelectFile(apdu);
+        case INS_SELECT_FILE: //defined in 9303-10
+            responseLength = processSelectFile(apdu);
             break;
-        case INS_READ_BINARY:
+        case INS_READ_BINARY: //defined in 9303-10
             responseLength = processReadBinary(apdu, le, protectedApdu);
             break;
-        case INS_UPDATE_BINARY:
+        case INS_UPDATE_BINARY: //defined in 9303-10
             processUpdateBinary(apdu);
             break;
         case INS_CREATE_FILE:
             processCreateFile(apdu);
             break;
         case INS_PUT_DATA:
-            processPutData(apdu);
+            responseLength = processPutData(apdu);
+            break;
+        case INS_TESTING:
+            byte[] testing = new byte[]{'t','e','s','t','i','n','g'};
+            Util.arrayCopyNonAtomic(testing,(byte)0, apdu.getBuffer(), (byte)0,(byte)testing.length);
+            responseLength = (byte)testing.length;
             break;
         default:
             ISOException.throwIt(SW_INS_NOT_SUPPORTED);
@@ -458,7 +470,7 @@ public class PassportApplet extends Applet implements ISO7816 {
         return 0;
     }
 
-    private void processPutData(APDU apdu) {
+    private short processPutData(APDU apdu) {
         if (isLocked()) {
             ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
         }
@@ -468,6 +480,7 @@ public class PassportApplet extends Applet implements ISO7816 {
         short lc = (short) (buffer[OFFSET_LC] & 0xff);
         short p1 = (short) (buffer[OFFSET_P1] & 0xff);
         short p2 = (short) (buffer[OFFSET_P2] & 0xff);
+        short returnLength = 0;
 
         // sanity check
         if (buffer.length < (short) (buffer_p + lc)) {
@@ -476,7 +489,8 @@ public class PassportApplet extends Applet implements ISO7816 {
 
         if (p1 == 0xde && p2 == 0xad) {
             persistentState |= LOCKED;
-        } else if (p1 == 0 && p2 == PRIVMODULUS_TAG) {
+        }
+        else if (p1 == 0 && p2 == PRIVMODULUS_TAG) {
             buffer_p = BERTLVScanner.readTag(buffer, buffer_p); // tag ==
             // PRIVMODULUS_TAG
             buffer_p = BERTLVScanner.readLength(buffer, buffer_p); // length ==
@@ -493,7 +507,8 @@ public class PassportApplet extends Applet implements ISO7816 {
 
             keyStore.rsaPrivateKey.setModulus(buffer, modOffset, modLength);
             persistentState |= HAS_MODULUS;
-        } else if (p1 == 0 && p2 == PRIVEXPONENT_TAG) {
+        }
+        else if (p1 == 0 && p2 == PRIVEXPONENT_TAG) {
             buffer_p = BERTLVScanner.readTag(buffer, buffer_p); // tag ==
             // PRIVEXP_TAG
             buffer_p = BERTLVScanner.readLength(buffer, buffer_p); // length ==
@@ -511,31 +526,38 @@ public class PassportApplet extends Applet implements ISO7816 {
 
             keyStore.rsaPrivateKey.setExponent(buffer, expOffset, expLength);
             persistentState |= HAS_EXPONENT;
-        } else if (p1 == 0 && p2 == MRZ_TAG) {
+        }
+        else if (p1 == 0 && p2 == MRZ_TAG) {
+
             // data is BERTLV object with three objects; docNr, dataOfBirth,
             // dateOfExpiry
             buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
             buffer_p = BERTLVScanner.readLength(buffer, buffer_p);
+
             buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
-            short docNrOffset = BERTLVScanner.readLength(buffer, buffer_p);
-            short docNrLength = BERTLVScanner.valueLength;
-            buffer_p = BERTLVScanner.skipValue();
-            buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
-            short dobOffset = BERTLVScanner.readLength(buffer, buffer_p);
-            short dobLength = BERTLVScanner.valueLength;
-            buffer_p = BERTLVScanner.skipValue();
-            buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
-            short doeOffset = BERTLVScanner.readLength(buffer, buffer_p);
-            short doeLength = BERTLVScanner.valueLength;
+            short docNumberOffset = BERTLVScanner.readLength(buffer, buffer_p);
+            short docNumberLength = BERTLVScanner.valueLength;
             buffer_p = BERTLVScanner.skipValue();
 
-            documentNumber = new byte[(short)(docNrLength+1)];
-            Util.arrayCopyNonAtomic(buffer, docNrOffset, documentNumber,
-                    (short) 0, docNrLength);
-            documentNumber[docNrLength] = PassportInit.checkDigit(documentNumber,(short)0, docNrLength);
+            buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
+            short birthOffset = BERTLVScanner.readLength(buffer, buffer_p);
+            short birthLength = BERTLVScanner.valueLength;
+            buffer_p = BERTLVScanner.skipValue();
 
-            short keySeed_offset = passportInit.computeKeySeed(buffer, docNrOffset,
-                    docNrLength, dobOffset, dobLength, doeOffset, doeLength);
+            buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
+            short expiryOffset = BERTLVScanner.readLength(buffer, buffer_p);
+            short expiryLength = BERTLVScanner.valueLength;
+            buffer_p = BERTLVScanner.skipValue();
+
+//            ISOException.throwIt((short)0xfaaf);//break point
+
+            documentNumber = new byte[(short)(docNumberLength+1)];
+            Util.arrayCopyNonAtomic(buffer, docNumberOffset, documentNumber,
+                    (short) 0, docNumberLength);
+            documentNumber[docNumberLength] = PassportInit.checkDigit(documentNumber,(short)0, docNumberLength);
+
+            short keySeed_offset = passportInit.computeKeySeed(buffer, docNumberOffset,
+                    docNumberLength, birthOffset, birthLength, expiryOffset, expiryLength);
 
             short macKey_p = (short) (keySeed_offset + KEYMATERIAL_LENGTH);
             short encKey_p = (short) (keySeed_offset + KEYMATERIAL_LENGTH + KEY_LENGTH);
@@ -546,7 +568,13 @@ public class PassportApplet extends Applet implements ISO7816 {
             keyStore.setMutualAuthenticationKeys(buffer, macKey_p, buffer,
                     encKey_p);
             persistentState |= HAS_MUTUALAUTHENTICATION_KEYS;
-        } else if (p1 == 0 && p2 == ECPRIVATEKEY_TAG) {
+
+
+            byte[] mrz_tag = new byte[]{'m','r','z','_','t','a','g'};
+            Util.arrayCopyNonAtomic(mrz_tag,(short)0,buffer,(short)0,(short)mrz_tag.length);
+            returnLength = (short) mrz_tag.length;
+        }
+        else if (p1 == 0 && p2 == ECPRIVATEKEY_TAG) {
             short finish = (short) (buffer_p + lc);
             while (buffer_p < finish) {
                 buffer_p = BERTLVScanner.readTag(buffer, buffer_p);
@@ -598,7 +626,7 @@ public class PassportApplet extends Applet implements ISO7816 {
                     // short k = Util.getShort(buffer, buffer_p);
                     break;
                 default:
-                    ISOException.throwIt(SW_WRONG_DATA);
+                    ISOException.throwIt(SW_WRONG_DATA);//6a80
                 break;
             }
             buffer_p = BERTLVScanner.skipValue();
@@ -608,7 +636,8 @@ public class PassportApplet extends Applet implements ISO7816 {
         } else {
             ISOException.throwIt(SW_WRONG_DATA);
         }
-    } else if (p2 == CVCERTIFICATE_TAG) {
+    }
+        else if (p2 == CVCERTIFICATE_TAG) {
         if ((byte) (persistentState & HAS_CVCERTIFICATE) == HAS_CVCERTIFICATE) {
             // We already have the certificate initialized
             ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
@@ -616,9 +645,11 @@ public class PassportApplet extends Applet implements ISO7816 {
         certificate.parseCertificate(buffer, buffer_p, lc, true);
         certificate.setRootCertificate(buffer, p1);
         persistentState |= HAS_CVCERTIFICATE;
-    } else {
-        ISOException.throwIt(SW_INCORRECT_P1P2);
     }
+        else {
+            ISOException.throwIt(SW_INCORRECT_P1P2);
+        }
+        return returnLength;
     }
 
     /**
@@ -875,7 +906,7 @@ public class PassportApplet extends Applet implements ISO7816 {
      * @param apdu
      *            where the first 2 data bytes encode the file to select.
      */
-    private void processSelectFile(APDU apdu) {
+    private short processSelectFile(APDU apdu) {
         if (isLocked() & !hasMutuallyAuthenticated()) {
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
@@ -889,6 +920,7 @@ public class PassportApplet extends Applet implements ISO7816 {
         if (apdu.getCurrentState() == APDU.STATE_INITIAL) {
             apdu.setIncomingAndReceive();
         }
+
         if (apdu.getCurrentState() != APDU.STATE_FULL_INCOMING) {
             // need all data in one APDU.
             ISOException.throwIt(SW_INTERNAL_ERROR);
@@ -899,10 +931,14 @@ public class PassportApplet extends Applet implements ISO7816 {
         if (fileSystem.getFile(fid) != null) {
             selectedFile = fid;
             volatileState[0] |= FILE_SELECTED;
-            return;
+            byte[] select_file = new byte[]{'s','e','l','e','c','t','_','f','i','l','e'};
+            Util.arrayCopyNonAtomic(select_file,(short) 0,buffer,(short)0,
+                    (short)select_file.length);
+            return (short) select_file.length;
         }
         setNoFileSelected();
         ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
+        return (short)0;
     }
 
     /**

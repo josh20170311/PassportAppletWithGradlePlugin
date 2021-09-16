@@ -55,7 +55,7 @@ public class BERTLVScanner {
             isPrimitive = true;
             break;
         case 0x20:
-            isPrimitive = false;
+            isPrimitive = false; // is constructed
             break;
         }
         switch (b & 0x1F) {
