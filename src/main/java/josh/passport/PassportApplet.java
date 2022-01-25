@@ -240,7 +240,7 @@ public class PassportApplet extends Applet implements ISO7816 {
         byte cla = buffer[OFFSET_CLA];
         byte ins = buffer[OFFSET_INS];
         short sw1sw2 = SW_OK;
-        boolean protectedApdu = (byte)(cla & CLA_PROTECTED_APDU)  == CLA_PROTECTED_APDU;
+        boolean protectedApdu = (byte)(cla & CLA_PROTECTED_APDU)  == CLA_PROTECTED_APDU; // 0x0c
         short responseLength = 0;
         short le = 0;
 
@@ -271,7 +271,7 @@ public class PassportApplet extends Applet implements ISO7816 {
                 sw1sw2 = e.getReason();
             }
         } else if (protectedApdu) {
-            ISOException.throwIt(ISO7816.SW_SECURE_MESSAGING_NOT_SUPPORTED);
+            ISOException.throwIt(ISO7816.SW_SECURE_MESSAGING_NOT_SUPPORTED); // 0x6882
         }
 
         if (sw1sw2 == SW_OK) {
@@ -337,7 +337,7 @@ public class PassportApplet extends Applet implements ISO7816 {
         case INS_INTERNAL_AUTHENTICATE: //defined in 9303-11
             responseLength = processInternalAuthenticate(apdu, protectedApdu);
             break;
-        case INS_SELECT_FILE: //defined in 9303-10
+        case INS_SELECT_FILE: //defined in 9303-10 // 0xa4
             responseLength = processSelectFile(apdu);
             break;
         case INS_READ_BINARY: //defined in 9303-10
@@ -638,14 +638,14 @@ public class PassportApplet extends Applet implements ISO7816 {
         }
     }
         else if (p2 == CVCERTIFICATE_TAG) {
-        if ((byte) (persistentState & HAS_CVCERTIFICATE) == HAS_CVCERTIFICATE) {
-            // We already have the certificate initialized
-            ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+            if ((byte) (persistentState & HAS_CVCERTIFICATE) == HAS_CVCERTIFICATE) {
+                // We already have the certificate initialized
+                ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+            }
+            certificate.parseCertificate(buffer, buffer_p, lc, true);
+            certificate.setRootCertificate(buffer, p1);
+            persistentState |= HAS_CVCERTIFICATE;
         }
-        certificate.parseCertificate(buffer, buffer_p, lc, true);
-        certificate.setRootCertificate(buffer, p1);
-        persistentState |= HAS_CVCERTIFICATE;
-    }
         else {
             ISOException.throwIt(SW_INCORRECT_P1P2);
         }
@@ -662,7 +662,7 @@ public class PassportApplet extends Applet implements ISO7816 {
      */
     private short processInternalAuthenticate(APDU apdu, boolean protectedApdu) {
         if (!hasInternalAuthenticationKeys() || !hasMutuallyAuthenticated()) {
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);  //6982
         }
 
         short buffer_p = (short) (OFFSET_CDATA & 0xff);

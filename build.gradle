@@ -2,7 +2,6 @@ buildscript{
     repositories{
         mavenCentral()
         maven{url 'https://javacard.pro/maven'}
-        maven{url 'https://deadcode.me/mvn'}
     }
     dependencies{
         classpath 'com.klinec:gradle-javacard:1.8.0'
@@ -22,20 +21,12 @@ sourceCompatibility = 1.8
 repositories {
     mavenCentral()
     maven{url 'https://javacard.pro/maven'}
-    maven{url 'https://deadcode.me/mvn'}
     flatDir{
         dirs 'libs'
     }
 }
 
-dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
-}
 
-test {
-    useJUnitPlatform()
-}
 
 final def sdk_dir = 'sdks/jc304_kit'
 javacard{
