@@ -57,6 +57,7 @@ javacard{
         script {
             name 'putData_MRZ'
             apdu '00da00621d401bc009413132333435363738c106393930393232c206323231323331'
+            // A12345678 990922 221231
         }
         script{
             name 'create_file_DG1'
